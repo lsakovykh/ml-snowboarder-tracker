@@ -1,0 +1,11 @@
+# resources/dataset.yaml
+path: ../resources/dataset  # Путь к корневой папке с данными (относительно train_yolo.py)
+train: images/train         # Путь к тренировочным изображениям
+val: images/val             # Путь к валидационным изображениям
+test: images/test           # Путь к тестовым изображениям (теперь это отдельный набор)
+
+# Число классов
+nc: 1
+
+# Названия классов в порядке их ID (0, 1, 2...)
+names: ['snowboarder']

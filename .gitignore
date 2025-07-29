@@ -8,14 +8,18 @@ __pycache__/
 # Настройки VS Code
 .vscode/
 
-# Изображения из selected_images
-resources/selected_frames/
-
 # Исходное видео
 resources/snowboard_day.mp4
 
 # Все извлеченные кадры
-resources/frames_for_labeling/
+resources/all_frames/
+
+# Папки с отобранными кадрами
+resources/train_val_raw/
+resources/test_raw/
+
+# Готовый датасет
+resources/dataset/
 
 # Логи и временные файлы
 *.log

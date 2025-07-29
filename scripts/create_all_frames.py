@@ -2,7 +2,7 @@ import cv2
 import os
 
 video_path = 'resources/snowboard_day.mp4'
-output_folder = 'resources/frames_for_labeling'
+output_folder = 'resources/all_frames'
 
 # Убедимся, что папка существует
 os.makedirs(output_folder, exist_ok=True)
