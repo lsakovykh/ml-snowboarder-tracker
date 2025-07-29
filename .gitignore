@@ -1,0 +1,22 @@
+# Виртуальное окружение
+venv/
+
+# Кэш Python
+__pycache__/
+*.pyc
+
+# Настройки VS Code
+.vscode/
+
+# Изображения из selected_images
+resources/selected_images/
+
+# Исходное видео
+resources/snowboard_day.mp4
+
+# Все извлеченные кадры
+resources/frames_for_labeling/
+
+# Логи и временные файлы
+*.log
+*.tmp
