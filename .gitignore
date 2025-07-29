@@ -9,7 +9,7 @@ __pycache__/
 .vscode/
 
 # Изображения из selected_images
-resources/selected_images/
+resources/selected_frames/
 
 # Исходное видео
 resources/snowboard_day.mp4
