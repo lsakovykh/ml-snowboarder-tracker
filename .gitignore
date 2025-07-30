@@ -1,5 +1,6 @@
 # Виртуальное окружение
 venv/
+.env
 
 # Кэш Python
 __pycache__/
@@ -7,6 +8,7 @@ __pycache__/
 
 # Настройки VS Code
 .vscode/
+.idea/
 
 # Исходное видео
 resources/snowboard_day.mp4
@@ -24,6 +26,16 @@ resources/dataset/
 # Результаты запусков модели
 runs/
 
+# Загруженные предобученные веса Yolov8
+notebooks/yolov8n.pt
+
+# Вспомогательный генерируемый файл
+unselected_images_for_test.txt
+
 # Логи и временные файлы
 *.log
 *.tmp
+
+# Файлы генерируемые ОС
+.DS_Store
+Thumbs.db
