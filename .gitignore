@@ -21,6 +21,9 @@ resources/test_raw/
 # Готовый датасет
 resources/dataset/
 
+# Результаты запусков модели
+runs/
+
 # Логи и временные файлы
 *.log
 *.tmp
