@@ -1,5 +1,6 @@
 import os
 import re
+import yaml
 
 
 def count_and_report_images(directory: str, description: str = "файлов", extensions=('.jpg', '.jpeg', '.png')):
@@ -83,12 +84,9 @@ def get_next_run_name(base_name: str, project_dir: str = '../runs/detect') -> st
     Returns:
         str: Новое имя для запуска.
     """
-    # Если скрипт запускается из ноутбука (папка notebooks/),
-    # то project_dir должен быть относительным к корневой папке проекта.
-    # Поэтому мы используем os.path.join, чтобы правильно построить путь.
     
     # Получаем текущую рабочую директорию (обычно папка notebooks/)
-    current_script_dir = os.path.dirname(os.path.abspath(__file__)) # Получаем путь к scripts/
+    current_script_dir = os.path.dirname(os.path.abspath(__file__))
     
     # Переходим на уровень выше, чтобы попасть в корневую папку проекта
     project_root = os.path.join(current_script_dir, '..')
@@ -115,3 +113,66 @@ def get_next_run_name(base_name: str, project_dir: str = '../runs/detect') -> st
     
     next_version = max_version + 1
     return f"{base_name}_v{next_version}"
+
+
+def check_yolo_dataset_paths(yaml_path: str) -> bool:
+    """
+    Читает файл dataset.yaml, проверяет доступность всех указанных в нем путей
+    для изображений и аннотаций, и выводит отчет.
+
+    Args:
+        yaml_path (str): Путь к файлу dataset.yaml.
+
+    Returns:
+        bool: True, если все пути доступны; False в противном случае.
+    """
+    all_paths_ok = True
+    print(f"Содержимое файла конфигурации '{yaml_path}':")
+    try:
+        with open(yaml_path, 'r', encoding='utf-8') as file:
+            yaml_content = yaml.safe_load(file)
+            print(yaml.dump(yaml_content, indent=2))
+        
+        # Получаем базовый путь из YAML-файла
+        base_path = yaml_content.get('path')
+        if not base_path:
+            print("ОШИБКА: Поле 'path' отсутствует в dataset.yaml.")
+            return False
+
+        # Убедимся, что base_path является абсолютным или правильным относительным
+        abs_base_path = os.path.abspath(os.path.join(os.path.dirname(yaml_path), base_path))
+        print(f"\nАбсолютный базовый путь датасета: {abs_base_path}")
+
+        print("\nПроверка доступности путей изображений:")
+        image_splits = {'train': 'train', 'val': 'val', 'test': 'test'}
+        for key, name in image_splits.items():
+            relative_path = yaml_content.get(key, '')
+            full_path = os.path.join(abs_base_path, relative_path)
+            
+            status = 'Доступен' if os.path.exists(full_path) else 'ОШИБКА: Недоступен!'
+            print(f"{name.capitalize()} images: {full_path} - {status}")
+            if not os.path.exists(full_path):
+                all_paths_ok = False
+        
+        # Проверка путей аннотаций (исправленная логика)
+        labels_base_path = os.path.join(abs_base_path, 'labels')
+        print(f"\nБазовый путь аннотаций: {labels_base_path}")
+        print("Проверка доступности путей аннотаций:")
+
+        label_splits = {'train': 'train', 'val': 'val', 'test': 'test'} # Используем те же ключи для label-поддиректорий
+        for key, name in label_splits.items():
+            full_path = os.path.join(labels_base_path, name) # Пути к labels всегда 'train', 'val', 'test'
+            
+            status = 'Доступен' if os.path.exists(full_path) else 'ОШИБКА: Недоступен!'
+            print(f"{name.capitalize()} labels: {full_path} - {status}")
+            if not os.path.exists(full_path):
+                all_paths_ok = False
+        
+    except FileNotFoundError:
+        print(f"Ошибка: Файл '{yaml_path}' не найден. Убедитесь, что он существует по указанному пути.")
+        all_paths_ok = False
+    except Exception as e:
+        print(f"Ошибка при чтении или обработке YAML файла: {e}")
+        all_paths_ok = False
+        
+    return all_paths_ok

@@ -5,6 +5,8 @@ venv/
 # Кэш Python
 __pycache__/
 *.pyc
+*.egg-info/
+
 
 # Настройки VS Code
 .vscode/
@@ -28,6 +30,9 @@ runs/
 
 # Загруженные предобученные веса Yolov8
 notebooks/yolov8n.pt
+
+# Исключаем фантомную yolo11n которая появляется сама по себе при загрузке других моделей
+notebooks/yolo11n.pt
 
 # Вспомогательный генерируемый файл
 unselected_images_for_test.txt
