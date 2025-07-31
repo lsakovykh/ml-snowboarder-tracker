@@ -70,47 +70,55 @@ def verify_dataset_split(
 
 
 
-def get_next_run_name(base_name: str, project_dir: str = '../runs/detect') -> str:
+def get_next_run_name(base_name: str, runs_relative_path: str = 'runs/detect') -> str:
     """
     Определяет имя следующего запуска, автоматически инкрементируя номер версии.
-    Например, для 'yolov8n_snowboarder' найдет 'yolov8n_snowboarder_v1', 'yolov8n_snowboarder_v2'
-    и предложит 'yolov8n_snowboarder_v3'.
+    Например, для 'yolov8n_snowboarder_detection' найдет 'yolov8n_snowboarder_detection_v1',
+    'yolov8n_snowboarder_detection_v2' и предложит 'yolov8n_snowboarder_detection_v3'.
 
     Args:
-        base_name (str): Базовое имя для запуска (например, 'yolov8n_snowboarder').
-        project_dir (str): Директория, где хранятся запуски относительно корневой папки проекта.
-                           По умолчанию '../runs/detect', так как скрипт запускается из ноутбука.
+        base_name (str): Базовое имя для запуска (например, 'yolov8n_snowboarder_detection').
+                         Это префикс, который будет использоваться для поиска существующих запусков.
+        runs_relative_path (str): Путь к директории, где хранятся запуски,
+                                  относительно корневой папки проекта.
+                                  Например: 'runs/detect' или 'runs/wandb'.
 
     Returns:
-        str: Новое имя для запуска.
+        str: Новое уникальное имя для запуска.
     """
-    
-    # Получаем текущую рабочую директорию (обычно папка notebooks/)
-    current_script_dir = os.path.dirname(os.path.abspath(__file__))
-    
-    # Переходим на уровень выше, чтобы попасть в корневую папку проекта
-    project_root = os.path.join(current_script_dir, '..')
+    # Определяем корневую директорию проекта.
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.abspath(os.path.join(script_dir, os.pardir)) # os.pardir это '..'
 
-    # Строим полный путь к project_dir относительно корневой папки проекта
-    full_project_dir = os.path.join(project_root, project_dir)
+    # Строим полный путь к директории, где ищутся запуски.
+    full_runs_dir = os.path.join(project_root, runs_relative_path)
 
-    if not os.path.exists(full_project_dir):
-        os.makedirs(full_project_dir)
+    # Если директория запусков не существует, создаем её и начинаем с v1
+    if not os.path.exists(full_runs_dir):
+        os.makedirs(full_runs_dir)
         return f"{base_name}_v1"
 
+    # Шаблон регулярного выражения для поиска папок вида 'base_name_vX'
     pattern = re.compile(rf"^{re.escape(base_name)}_v(\d+)$")
     
     max_version = 0
-    for folder_name in os.listdir(full_project_dir):
-        match = pattern.match(folder_name)
-        if match:
-            try:
-                version = int(match.group(1))
-                if version > max_version:
-                    max_version = version
-            except ValueError:
-                pass
+    # Перебираем все элементы в директории запусков
+    for folder_name in os.listdir(full_runs_dir):
+        # Проверяем, является ли элемент директорией (чтобы не обрабатывать файлы)
+        item_full_path = os.path.join(full_runs_dir, folder_name)
+        if os.path.isdir(item_full_path):
+            match = pattern.match(folder_name)
+            if match:
+                try:
+                    # Извлекаем номер версии и обновляем max_version
+                    version = int(match.group(1))
+                    if version > max_version:
+                        max_version = version
+                except ValueError:
+                    # Игнорируем папки, если числовая часть не является корректным целым числом
+                    pass
     
+    # Следующая версия будет на 1 больше максимальной найденной
     next_version = max_version + 1
     return f"{base_name}_v{next_version}"
 

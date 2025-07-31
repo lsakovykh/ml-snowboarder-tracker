@@ -81,7 +81,7 @@ tornado==6.5.1
 tqdm==4.67.1
 traitlets==5.14.3
 typing-inspection==0.4.1
-typing_extensions==4.12.2
+typing_extensions==4.14.1
 tzdata==2025.2
 ultralytics==8.3.170
 ultralytics-thop==2.0.14
