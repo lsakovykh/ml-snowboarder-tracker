@@ -14,6 +14,7 @@ __pycache__/
 
 # Исходное видео
 resources/snowboard_day.mp4
+resources/snowboard_short.mp4
 
 # Все извлеченные кадры
 resources/all_frames/
