@@ -3,7 +3,7 @@ import os
 import numpy as np
 import json
 from ultralytics import YOLO
-from typing import Tuple, Optional, Dict, Any # Добавили Dict и Any для более точных типов
+from typing import Tuple, Optional, Dict, Any
 
 def generate_drone_commands(
     object_center: Tuple[int, int],
@@ -191,7 +191,7 @@ def track_video_and_center_object(
         }
 
         # 1. Выполнение детекции и отслеживания
-        results = model.track(frame, persist=True, conf=confidence_threshold, iou=iou_threshold, classes=[target_class_id], verbose=False, tracker='botsort.yaml')
+        results = model.track(frame, persist=True, conf=confidence_threshold, iou=iou_threshold, classes=[target_class_id], verbose=False, tracker='bytetrack.yaml')
 
         current_target_bbox: Optional[Tuple[int, int, int, int, int, float, int]] = None 
         current_target_center: Optional[Tuple[int, int]] = None
