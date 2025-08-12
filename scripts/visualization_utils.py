@@ -1,14 +1,22 @@
 import cv2
 import os
 import random
-import base64 
+import base64
+import numpy as np
+from typing import Tuple, Dict, Any 
 from IPython.display import display, Image, HTML, Markdown
-
+import json
+from PIL import Image, ImageDraw, ImageFont
 
 try:
     import wandb
 except ImportError:
     wandb = None # W&B не установлен или недоступен
+
+
+# Определяем корневую директорию проекта, исходя из расположения текущего скрипта
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.abspath(os.path.join(script_dir, os.pardir))
 
 
 # Функция для отображения обычных изображений (без bbox)
@@ -269,3 +277,218 @@ def display_and_log_multiple_image_artifacts(
             caption=title, # Используем заголовок как подпись
             width=widths.get(filename) # Получаем индивидуальную ширину
         )
+
+
+def create_side_by_side_demo_video(
+    original_video_path: str,
+    tracked_video_path: str,
+    tracking_log_path: str, # Путь к файлу логов с данными трекинга
+    output_demo_path: str,
+    tracked_video_fixed_size: int = 640, # Размер стороны квадратного отслеживаемого видео
+    overlay_height: int = 120, # Высота нижней области оверлея
+    original_video_width_ratio: float = 0.6 # Соотношение ширины исходного видео в верхней секции
+) -> None:
+    """
+    Создает демонстрационное видео с исходным видео (60% ширины), отслеживаемым видео (40% ширины)
+    и подробным текстовым оверлеем внизу.
+
+    Args:
+        original_video_path (str): Путь к исходному видеофайлу.
+        tracked_video_path (str): Путь к видеофайлу с отслеживанием (с BBox и ID).
+        tracking_log_path (str): Путь к файлу логов с данными трекинга (JSONL).
+        output_demo_path (str): Путь для сохранения объединенного демо-видео.
+        tracked_video_fixed_size (int): Размер стороны квадратного отслеживаемого видео (e.g., 640).
+        overlay_height (int): Высота нижней области оверлея в пикселях.
+        original_video_width_ratio (float): Доля ширины, которую занимает исходное видео (например, 0.6 для 60%).
+    """
+    cap_orig = cv2.VideoCapture(original_video_path)
+    cap_tracked = cv2.VideoCapture(tracked_video_path)
+
+    if not cap_orig.isOpened():
+        print(f"Ошибка: Не удалось открыть исходное видео {original_video_path}")
+        return
+    if not cap_tracked.isOpened():
+        print(f"Ошибка: Не удалось открыть отслеживаемое видео {tracked_video_path}")
+        cap_orig.release()
+        return
+
+    # Загружаем данные логов
+    tracking_data = []
+    try:
+        with open(tracking_log_path, 'r') as f:
+            for line in f:
+                tracking_data.append(json.loads(line.strip()))
+        print(f"Успешно загружены данные трекинга из: {tracking_log_path}")
+    except FileNotFoundError:
+        print(f"Ошибка: Файл логов не найден по пути: {tracking_log_path}. Оверлей может быть неполным.")
+        tracking_data = [{"frame": i+1, "status": "НЕТ ЛОГОВ", "commands": {"horizontal": "NONE", "vertical": "NONE", "distance": "NONE"}, "confidence": None, "bbox_size_ratio": None, "tracked_id": None, "fps": None} for i in range(int(cap_orig.get(cv2.CAP_PROP_FRAME_COUNT)))]
+    except json.JSONDecodeError as e:
+        print(f"Ошибка чтения файла логов {tracking_log_path}: {e}. Проверьте формат файла.")
+        tracking_data = [{"frame": i+1, "status": "ОШИБКА ЛОГОВ", "commands": {"horizontal": "NONE", "vertical": "NONE", "distance": "NONE"}, "confidence": None, "bbox_size_ratio": None, "tracked_id": None, "fps": None} for i in range(int(cap_orig.get(cv2.CAP_PROP_FRAME_COUNT)))]
+
+
+    # Получаем свойства исходных видео
+    fps = cap_orig.get(cv2.CAP_PROP_FPS)
+    orig_width = int(cap_orig.get(cv2.CAP_PROP_FRAME_WIDTH))
+    orig_height = int(cap_orig.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    
+    # Высота верхней секции будет определяться высотой отслеживаемого видео
+    top_section_height = tracked_video_fixed_size
+
+    # Общая ширина верхней секции
+    top_section_width = int(tracked_video_fixed_size / (1.0 - original_video_width_ratio) * original_video_width_ratio + tracked_video_fixed_size) # Или просто int(tracked_video_fixed_size / (1 - original_video_width_ratio))
+
+    # Рассчитываем ширину для исходного видео
+    new_orig_width = int(top_section_width * original_video_width_ratio)
+    
+    # Масштабируем исходное видео, сохраняя пропорции, и подгоняем его по высоте к top_section_height
+    # Чтобы избежать растягивания, мы масштабируем его до ширины new_orig_width
+    # и центрируем по вертикали, добавляя черные полосы сверху/снизу
+    orig_aspect_ratio = orig_width / orig_height
+    scaled_orig_height = int(new_orig_width / orig_aspect_ratio)
+
+    # Общие размеры финального демо-видео
+    output_width = top_section_width
+    output_height = top_section_height + overlay_height
+
+    try:
+        font_path = os.path.join(project_root, "resources", "arial.ttf")
+        # Указываем размер шрифта (в пикселях)
+        status_font_size = 24
+        commands_font_size = 20
+        fps_font_size = 20
+        
+        # Создаем объекты шрифтов
+        status_font = ImageFont.truetype(font_path, status_font_size)
+        commands_font = ImageFont.truetype(font_path, commands_font_size)
+        fps_font = ImageFont.truetype(font_path, fps_font_size)
+    except IOError:
+        print(f"Внимание: Шрифт '{font_path}' не найден. Будет использоваться шрифт по умолчанию, что может привести к неправильному отображению кириллицы.")
+        status_font = ImageFont.load_default()
+        commands_font = ImageFont.load_default()
+        fps_font = ImageFont.load_default()
+
+    # Подготовка для записи выходного демо-видео
+    output_dir = os.path.dirname(output_demo_path)
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+        print(f"Создана выходная директория для демо-видео: {output_dir}")
+
+    out = None
+    codec_options = [
+        ('mp4v', '.mp4'),
+        ('avc1', '.mp4'),
+        ('XVID', '.avi'),
+        ('MJPG', '.avi')
+    ]
+
+    final_output_path = output_demo_path
+
+    for codec_fourcc_str, ext in codec_options:
+        temp_output_path = output_demo_path.rsplit('.', 1)[0] + ext
+        try:
+            print(f"Попытка инициализации VideoWriter для демо-видео с кодеком '{codec_fourcc_str}' и расширением '{ext}'...")
+            fourcc = cv2.VideoWriter_fourcc(*codec_fourcc_str) # type: ignore
+            out = cv2.VideoWriter(temp_output_path, fourcc, fps, (output_width, output_height))
+            if out.isOpened():
+                final_output_path = temp_output_path
+                print(f"Успешно инициализирован VideoWriter для демо-видео с кодеком '{codec_fourcc_str}'. Видео будет сохранено как: {final_output_path}")
+                break
+            else:
+                print(f"Не удалось инициализировать VideoWriter для демо-видео с кодеком '{codec_fourcc_str}'.")
+        except Exception as e:
+            print(f"Ошибка при попытке инициализации VideoWriter для демо-видео с кодеком '{codec_fourcc_str}': {e}")
+        out = None
+
+    if out is None or not out.isOpened():
+        print("Критическая ошибка: Не удалось создать VideoWriter для демо-видео ни с одним из предложенных кодеков. Проверьте установку кодеков и права доступа.")
+        cap_orig.release()
+        cap_tracked.release()
+        return
+    
+    output_demo_path = final_output_path
+    print(f"Создание демо-видео: {output_demo_path} с разрешением {output_width}x{output_height}")
+
+    frame_idx = 0
+    while True:
+        ret_orig, frame_orig = cap_orig.read()
+        ret_tracked, frame_tracked = cap_tracked.read()
+
+        if not ret_orig or not ret_tracked:
+            break
+
+        # 1. Подготовка верхней части: масштабирование и объединение видео
+        current_orig_scaled = cv2.resize(frame_orig, (new_orig_width, scaled_orig_height))
+        padded_orig_frame = np.zeros((top_section_height, new_orig_width, 3), dtype=np.uint8)
+        y_offset = (top_section_height - scaled_orig_height) // 2
+        padded_orig_frame[y_offset : y_offset + scaled_orig_height, :] = current_orig_scaled
+
+        resized_tracked_frame = cv2.resize(frame_tracked, (tracked_video_fixed_size, tracked_video_fixed_size))
+        
+        top_section = np.hstack((padded_orig_frame, resized_tracked_frame))
+
+        # 2. Подготовка нижней части: оверлей
+        overlay_section = np.zeros((overlay_height, output_width, 3), dtype=np.uint8)
+        
+        current_log_data = tracking_data[frame_idx] if frame_idx < len(tracking_data) else {
+            "frame": frame_idx + 1, "status": "Нет данных", 
+            "commands": {"horizontal": "NONE", "vertical": "NONE", "distance": "NONE"},
+            "confidence": None, "bbox_size_ratio": None, "tracked_id": None, "fps": None
+        }
+
+        # --- ОТРИСОВКА ТЕКСТА С ИСПОЛЬЗОВАНИЕМ PILLOW ---
+        pil_img = Image.fromarray(cv2.cvtColor(overlay_section, cv2.COLOR_BGR2RGB))
+        draw = ImageDraw.Draw(pil_img)
+        
+        text_color_pil = (255, 255, 255) # Белый цвет для Pillow (RGB)
+
+        # Строка 1: Статус трекинга и ID
+        status_text = f"Статус: {current_log_data['status']}"
+        if current_log_data.get('tracked_id') is not None:
+             status_text += f" (ID: {current_log_data['tracked_id']})"
+        draw.text((10, 5), status_text, font=status_font, fill=text_color_pil) # Позиция (x, y)
+
+        # Строка 2: Уверенность и соотношение размера
+        info_text = ""
+        if current_log_data.get('confidence') is not None:
+            info_text += f"Уверенность: {current_log_data['confidence']:.2f}"
+        if current_log_data.get('bbox_size_ratio') is not None:
+            if info_text: info_text += " | "
+            size_ratio_val = float(current_log_data['bbox_size_ratio'].replace('%', '')) / 100.0
+            size_status = ""
+            if size_ratio_val < 0.9: size_status = "(Приблизься!)"
+            elif size_ratio_val > 1.1: size_status = "(Отдалиться!)"
+            else: size_status = "(ОК)"
+            
+            info_text += f"Размер: {current_log_data['bbox_size_ratio']} {size_status}"
+        draw.text((10, 35), info_text, font=commands_font, fill=text_color_pil) # Позиция (x, y)
+
+        # Строка 3: Команды дрона
+        commands_dict = current_log_data.get('commands', {"horizontal": "NONE", "vertical": "NONE", "distance": "NONE"})
+        commands_text = f"Команды: Гор: {commands_dict['horizontal']} | Верт: {commands_dict['vertical']} | Дист: {commands_dict['distance']}"
+        draw.text((10, 65), commands_text, font=commands_font, fill=text_color_pil) # Позиция (x, y)
+
+        # Строка 4: FPS обработки
+        if current_log_data.get('fps') is not None:
+            fps_text = f"FPS обработки: {current_log_data['fps']:.1f}"
+            # Для позиционирования справа: вычисляем ширину текста и отнимаем от общей ширины
+            text_width, text_height = draw.textsize(fps_text, font=fps_font) # type: ignore
+            draw.text((output_width - text_width - 10, 5), fps_text, font=fps_font, fill=text_color_pil)
+
+        # Преобразуем изображение PIL обратно в numpy массив для OpenCV
+        overlay_section = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
+        # -------------------------------------------------------------
+
+        # Объединяем верхнюю и нижнюю секции
+        combined_frame = np.vstack((top_section, overlay_section))
+        
+        out.write(combined_frame)
+        frame_idx += 1
+        if frame_idx % 100 == 0:
+            print(f"Создано демо-кадров: {frame_idx}")
+
+    cap_orig.release()
+    cap_tracked.release()
+    out.release()
+    cv2.destroyAllWindows()
+    print(f"Создание демонстрационного видео завершено. Результат сохранен в {output_demo_path}")
