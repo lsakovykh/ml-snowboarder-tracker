@@ -22,6 +22,6 @@ paths:
   data_path: ../resources/dataset
   output_path: ../runs/experiments
   model_path: ../runs/detect/yolo11n_snowboarder_detection_v1/weights/best.pt
-  video_input_path: ../resources/snowboard_short.mp4
+  video_input_path: ../resources/snowboard_quick_test.mp4
   video_output_path: ../runs/track/{track_run_name}/tracked_snowboarder.mp4
   
