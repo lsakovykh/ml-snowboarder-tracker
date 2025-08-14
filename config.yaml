@@ -1,0 +1,27 @@
+training:
+  epochs: 50
+  batch_size: 16
+  learning_rate: 0.001
+  imgsz: 640
+  patience: 50
+  resume: false
+  device: null
+  conf_threshold: 0.25
+  iou_threshold: 0.7
+
+tracking:
+  target_class_id: 0
+  target_imgsz: 640
+  confidence_threshold: 0.25
+  iou_threshold: 0.7
+  track_buffer: 30
+  tolerance_pixels: 20
+  target_bbox_area_percentage: 0.15
+
+paths:
+  data_path: ../resources/dataset
+  output_path: ../runs/experiments
+  model_path: ../runs/detect/yolo11n_snowboarder_detection_v1/weights/best.pt
+  video_input_path: ../resources/snowboard_short.mp4
+  video_output_path: ../runs/track/{track_run_name}/tracked_snowboarder.mp4
+  
