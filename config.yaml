@@ -1,27 +1,40 @@
+# ==============================================================================
+#                            КОНФИГУРАЦИОННЫЙ ФАЙЛ
+# ==============================================================================
+
+# --- НАСТРОЙКИ ОБУЧЕНИЯ МОДЕЛИ ---
 training:
-  epochs: 50
-  batch_size: 16
-  learning_rate: 0.001
-  imgsz: 640
-  patience: 50
-  resume: false
-  device: null
-  conf_threshold: 0.25
-  iou_threshold: 0.7
+  epochs: 50                 # Количество эпох для обучения модели
+  batch_size: 16             # Размер батча для обучения
+  learning_rate: 0.001       # Начальная скорость обучения для оптимизатора
+  imgsz: 640                 # Размер изображения (сторона квадрата) для обучения и валидации модели
+  patience: 50               # Количество эпох без улучшения метрики (mAP), после которых обучение будет остановлено (Early Stopping)
+  resume: false              # Продолжить обучение с последней сохраненной точки (true/false)
+  device: null               # Устройство для обучения (например, '0' для первой GPU, 'cpu' для CPU, 'null' для автоопределения).
+  conf_threshold: 0.25       # Порог уверенности (confidence) для детекций во время валидации/тестирования.
+  iou_threshold: 0.7         # Порог Intersection over Union (IoU) для NMS (Non-Maximum Suppression) во время валидации/тестирования
 
+# --- НАСТРОЙКИ ОТСЛЕЖИВАНИЯ ОБЪЕКТОВ ---
 tracking:
-  target_class_id: 0
-  target_imgsz: 640
-  confidence_threshold: 0.25
-  iou_threshold: 0.7
-  track_buffer: 30
-  tolerance_pixels: 20
-  target_bbox_area_percentage: 0.15
+  target_class_id: 0         # ID класса объекта, который нужно отслеживать (0 соответствует 'snowboarder' в dataset.yaml).
+  target_imgsz: 640          # Желаемый размер (сторона квадрата) выходного видеокадра
+  confidence_threshold: 0.25 # Порог уверенности для детекций, используемый трекером.
+  iou_threshold: 0.7         # Порог IoU для NMS, используемый трекером.
+  tracker_type: bytetrack    # Тип алгоритма отслеживания. Доступные варианты: 'bytetrack', 'botsort'.
+  track_buffer: 30           # Количество кадров, в течение которых трекер будет сохранять ID объекта после его потери
+  tolerance_pixels: 20       # Допустимое отклонение центра отслеживаемого объекта от центра кадра (в пикселях) по горизонтали или вертикали
+  target_bbox_area_percentage: 0.15 # Определяет целевую площадь ограничивающей рамки объекта
+                                    # как процент (от 0 до 1) от общей площади исходного кадра.
+                                    # Также используется для определения диапазона толерантности
+                                    # для команд изменения дистанции (например, 0.15 означает +/- 15% от целевой площади).
 
+# --- НАСТРОЙКИ ПУТЕЙ К ДАННЫМ И ВЫХОДАМ ---
+# Все пути относительны к корневой директории проекта.
 paths:
-  data_path: ../resources/dataset
-  output_path: ../runs/experiments
-  model_path: ../runs/detect/yolo11n_snowboarder_detection_v1/weights/best.pt
-  video_input_path: ../resources/snowboard_quick_test.mp4
-  video_output_path: ../runs/track/{track_run_name}/tracked_snowboarder.mp4
+  data_path: ../resources/dataset                                   # Базовый путь к директории с подготовленным датасетом
+  output_path: ../runs/experiments                                  # Базовый путь для всех выходных файлов (логи, модели, видео)
+  model_path: ../runs/detect/yolo11n_snowboarder_detection_v1/weights/best.pt # Путь к файлу обученной модели YOLO (best.pt)
+  video_input_path: ../resources/snowboard_quick_test.mp4           # Путь к исходному видео для отслеживания
+  video_output_path: ../runs/track/{track_run_name}/tracked_snowboarder.mp4 # Шаблон пути для сохранения выходного видео с отслеживанием
+                                                                    # {track_run_name} будет заменен динамически.
   

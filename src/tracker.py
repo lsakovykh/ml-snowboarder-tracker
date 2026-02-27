@@ -67,9 +67,9 @@ def generate_drone_commands(
     target_obj_area = original_total_frame_area * target_bbox_area_percentage
 
     # Пороги для команд "FORWARD" (приблизиться) и "BACKWARD" (отдалиться)
-    if current_obj_area < target_obj_area * 0.85:
+    if current_obj_area < target_obj_area * 0.9:
         commands["distance"] = "FORWARD"
-    elif current_obj_area > target_obj_area * 1.15:
+    elif current_obj_area > target_obj_area * 1.1:
         commands["distance"] = "BACKWARD"
     
     return commands
@@ -195,7 +195,7 @@ def process_single_frame(frame: np.ndarray, model: YOLO, config: Dict[str, Any],
     # Выполнение детекции и отслеживания
     results = model.track(frame, persist=True, conf=config['tracking']['confidence_threshold'], 
                           iou=config['tracking']['iou_threshold'], classes=[config['tracking']['target_class_id']], 
-                          verbose=False, tracker='bytetrack.yaml')
+                          verbose=False, tracker=f'{config["tracking"]["tracker_type"]}.yaml')
 
     state.current_target_bbox = None # (x1, y1, x2, y2, track_id, conf, cls)
     state.current_target_center = None
