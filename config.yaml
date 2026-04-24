@@ -22,6 +22,7 @@ tracking:
   iou_threshold: 0.7         # Порог IoU для NMS, используемый трекером.
   tracker_type: bytetrack    # Тип алгоритма отслеживания. Доступные варианты: 'bytetrack', 'botsort'.
   track_buffer: 30           # Количество кадров, в течение которых трекер будет сохранять ID объекта после его потери
+  allow_target_reassignment: false # Если true, после потери ID цель будет заменена крупнейшим найденным объектом.
   tolerance_pixels: 20       # Допустимое отклонение центра отслеживаемого объекта от центра кадра (в пикселях) по горизонтали или вертикали
   target_bbox_area_percentage: 0.15 # Определяет целевую площадь ограничивающей рамки объекта
                                     # как процент (от 0 до 1) от общей площади исходного кадра.
@@ -31,10 +32,10 @@ tracking:
 # --- НАСТРОЙКИ ПУТЕЙ К ДАННЫМ И ВЫХОДАМ ---
 # Все пути относительны к корневой директории проекта.
 paths:
-  data_path: ../resources/dataset                                   # Базовый путь к директории с подготовленным датасетом
-  output_path: ../runs/experiments                                  # Базовый путь для всех выходных файлов (логи, модели, видео)
-  model_path: ../runs/detect/yolo11n_snowboarder_detection_v1/weights/best.pt # Путь к файлу обученной модели YOLO (best.pt)
-  video_input_path: ../resources/snowboard_quick_test.mp4           # Путь к исходному видео для отслеживания
-  video_output_path: ../runs/track/{track_run_name}/tracked_snowboarder.mp4 # Шаблон пути для сохранения выходного видео с отслеживанием
+  data_path: resources/dataset                                   # Базовый путь к директории с подготовленным датасетом
+  output_path: runs/experiments                                  # Базовый путь для всех выходных файлов (логи, модели, видео)
+  model_path: runs/detect/yolo11n_snowboarder_detection_v1/weights/best.pt # Путь к файлу обученной модели YOLO (best.pt)
+  video_input_path: resources/snowboard_quick_test.mp4           # Путь к исходному видео для отслеживания
+  video_output_path: runs/track/{track_run_name}/tracked_snowboarder.mp4 # Шаблон пути для сохранения выходного видео с отслеживанием
                                                                     # {track_run_name} будет заменен динамически.
   

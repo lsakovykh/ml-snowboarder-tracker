@@ -1,9 +1,42 @@
-import cv2
-import os
+from __future__ import annotations
+
 import numpy as np
 import json
-from ultralytics import YOLO
-from typing import List, Tuple, Optional, Dict, Any
+from pathlib import Path
+from typing import TYPE_CHECKING, List, Tuple, Optional, Dict, Any, TextIO, Union
+
+try:
+    import cv2
+except ImportError:
+    cv2 = None  # type: ignore
+
+if TYPE_CHECKING:
+    import cv2 as cv2_types
+    from ultralytics import YOLO
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+
+def resolve_project_path(path: Union[str, Path]) -> Path:
+    """Resolve relative paths from the repository root, not from the current shell."""
+    path = Path(path).expanduser()
+    if path.is_absolute():
+        return path
+    return (PROJECT_ROOT / path).resolve()
+
+
+def _require_cv2():
+    if cv2 is None:
+        raise ImportError("opencv-python не установлен. Установите зависимости: pip install -r requirements.txt")
+    return cv2
+
+
+def _load_yolo_class():
+    try:
+        from ultralytics import YOLO
+    except ImportError as exc:
+        raise ImportError("ultralytics не установлен. Установите зависимости: pip install -r requirements.txt") from exc
+    return YOLO
 
 def generate_drone_commands(
     object_center: Tuple[int, int], # Координаты центра объекта (cx, cy) в исходном кадре
@@ -83,7 +116,7 @@ class TrackerState:
         self.current_target_bbox: Optional[Tuple[int, int, int, int, int, float, int]] = None
         self.current_target_center: Optional[Tuple[int, int]] = None
 
-def load_model_and_video(model_path: str, video_input_path: str, config: Dict[str, Any]) -> Tuple[YOLO, cv2.VideoCapture]:
+def load_model_and_video(model_path: Union[str, Path], video_input_path: Union[str, Path], config: Dict[str, Any]) -> Tuple["YOLO", "cv2_types.VideoCapture"]:
     """
     Загружает модель YOLO и открывает входное видео.
 
@@ -95,21 +128,29 @@ def load_model_and_video(model_path: str, video_input_path: str, config: Dict[st
     Returns:
         Tuple[YOLO, cv2.VideoCapture]: Загруженная модель и объект VideoCapture.
     """
-    # Загрузка модели YOLO
+    model_path = resolve_project_path(model_path)
+    video_input_path = resolve_project_path(video_input_path)
+
+    if not model_path.is_file():
+        raise FileNotFoundError(f"Файл модели не найден: '{model_path}'")
+    if not video_input_path.is_file():
+        raise FileNotFoundError(f"Видеофайл не найден: '{video_input_path}'")
+
+    cv2_module = _require_cv2()
+    YOLO = _load_yolo_class()
     try:
-        model = YOLO(model_path)
+        model = YOLO(str(model_path))
         print(f"Модель успешно загружена из: '{model_path}'")
     except Exception as e:
         print(f"Критическая ошибка: Не удалось загрузить модель по пути '{model_path}'. Ошибка: {e}")
         raise
-    # Чтение входного видео
-    cap = cv2.VideoCapture(video_input_path)
+
+    cap = cv2_module.VideoCapture(str(video_input_path))
     if not cap.isOpened():
-        print(f"Критическая ошибка: Не удалось открыть видеофайл по пути: '{video_input_path}'.")
-        raise
+        raise OSError(f"Не удалось открыть видеофайл: '{video_input_path}'")
     return model, cap
 
-def setup_output(video_output_path: str, cap: cv2.VideoCapture, config: Dict[str, Any]) -> Tuple[cv2.VideoWriter, str, str]:
+def setup_output(video_output_path: Union[str, Path], cap: "cv2_types.VideoCapture", config: Dict[str, Any]) -> Tuple["cv2_types.VideoWriter", Path, Path]:
     """
     Настраивает выходной VideoWriter и файл логов.
 
@@ -122,15 +163,17 @@ def setup_output(video_output_path: str, cap: cv2.VideoCapture, config: Dict[str
         Tuple[cv2.VideoWriter, str, str]: VideoWriter, финальный путь видео, путь лога.
     """
     # Проверка и создание выходной директории
-    output_dir = os.path.dirname(video_output_path)
-    os.makedirs(output_dir, exist_ok=True)
+    cv2_module = _require_cv2()
+    video_output_path = resolve_project_path(video_output_path)
+    output_dir = video_output_path.parent
+    output_dir.mkdir(parents=True, exist_ok=True)
     print(f"Выходная директория для видео и логов: '{output_dir}'")
 
     # Получаем основные свойства исходного видео
-    frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    fps = cap.get(cv2.CAP_PROP_FPS)
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    frame_width = int(cap.get(cv2_module.CAP_PROP_FRAME_WIDTH))
+    frame_height = int(cap.get(cv2_module.CAP_PROP_FRAME_HEIGHT))
+    fps = cap.get(cv2_module.CAP_PROP_FPS)
+    total_frames = int(cap.get(cv2_module.CAP_PROP_FRAME_COUNT))
 
     print(f"Исходное видео: '{video_output_path}'")
     print(f"Разрешение: {frame_width}x{frame_height}, FPS: {fps:.2f}, Всего кадров: {total_frames}")
@@ -148,11 +191,11 @@ def setup_output(video_output_path: str, cap: cv2.VideoCapture, config: Dict[str
 
     # Попытка инициализации VideoWriter с разными кодеками 
     for codec_fourcc_str, ext in codec_options:
-        temp_video_output_path = video_output_path.rsplit('.', 1)[0] + ext
+        temp_video_output_path = video_output_path.with_suffix(ext)
         try:
             print(f"Попытка инициализации VideoWriter с кодеком '{codec_fourcc_str}' и расширением '{ext}'...")
-            fourcc = cv2.VideoWriter_fourcc(*codec_fourcc_str) # type: ignore
-            out = cv2.VideoWriter(temp_video_output_path, fourcc, fps, (config['tracking']['target_imgsz'], config['tracking']['target_imgsz']))
+            fourcc = cv2_module.VideoWriter_fourcc(*codec_fourcc_str) # type: ignore
+            out = cv2_module.VideoWriter(str(temp_video_output_path), fourcc, fps, (config['tracking']['target_imgsz'], config['tracking']['target_imgsz']))
             if out.isOpened():
                 final_video_output_path = temp_video_output_path
                 print(f"Успешно инициализирован VideoWriter с кодеком '{codec_fourcc_str}'.")
@@ -161,13 +204,12 @@ def setup_output(video_output_path: str, cap: cv2.VideoCapture, config: Dict[str
             print(f"Ошибка при попытке инициализации VideoWriter с кодеком '{codec_fourcc_str}': {e}")
         out = None
     if out is None or not out.isOpened():
-        print("Критическая ошибка: Не удалось создать VideoWriter.")
-        raise
+        raise OSError(f"Не удалось создать VideoWriter для '{video_output_path}'")
     # Файл логов будет создан в той же директории, что и выходное видео
-    log_file_path = os.path.join(os.path.dirname(final_video_output_path), "tracking_log.jsonl")
+    log_file_path = final_video_output_path.parent / "tracking_log.jsonl"
     return out, final_video_output_path, log_file_path
 
-def process_single_frame(frame: np.ndarray, model: YOLO, config: Dict[str, Any], state: TrackerState, frame_count: int, frame_width: int, frame_height: int) -> Dict[str, Any]:
+def process_single_frame(frame: np.ndarray, model: "YOLO", config: Dict[str, Any], state: TrackerState, frame_count: int, frame_width: int, frame_height: int) -> Dict[str, Any]:
     """
     Обрабатывает один кадр: детекция, трекинг, генерация команд.
 
@@ -231,9 +273,13 @@ def process_single_frame(frame: np.ndarray, model: YOLO, config: Dict[str, Any],
                 state.tracking_status = f"Поиск ID: {state.target_track_id} (временно потерян)"
                 current_frame_data["status"] = "Потерян"
 
-        # Если целевой ID не задан (это первый кадр, или объект был потерян и нужно выбрать новый)
-        # или если мы искали, но не нашли старый ID:
+        # Если целевой ID не задан, выбираем самый крупный объект.
+        # Повторный выбор после потери ID отключен по умолчанию, чтобы не перескочить на другого райдера.
         if state.current_target_bbox is None:
+            allow_reassignment = config['tracking'].get('allow_target_reassignment', False)
+            if state.target_track_id is not None and not allow_reassignment:
+                return current_frame_data
+
             max_area = 0
             selected_new_target = False
             for i in range(len(boxes)):
@@ -303,8 +349,8 @@ def process_single_frame(frame: np.ndarray, model: YOLO, config: Dict[str, Any],
 
     return current_frame_data
 
-def write_frame_data(frame: np.ndarray, current_frame_data: Dict[str, Any], state: TrackerState, 
-                    out: cv2.VideoWriter, log_file, config: Dict[str, Any], frame_count: int, 
+def write_frame_data(frame: np.ndarray, current_frame_data: Dict[str, Any], state: TrackerState,
+                    out: "cv2_types.VideoWriter", log_file: TextIO, config: Dict[str, Any], frame_count: int,
                     frame_width: int, frame_height: int) -> None:
     """
     Записывает данные кадра в лог и видео.
@@ -320,6 +366,8 @@ def write_frame_data(frame: np.ndarray, current_frame_data: Dict[str, Any], stat
     target_imgsz = config['tracking']['target_imgsz']
     if state.last_known_center is None:
         out.write(np.zeros((target_imgsz, target_imgsz, 3), dtype=np.uint8))
+        json.dump(current_frame_data, log_file, ensure_ascii=False)
+        log_file.write('\n')
         return
 
     # Вычисление области обрезки для центрирования объекта
@@ -364,6 +412,7 @@ def write_frame_data(frame: np.ndarray, current_frame_data: Dict[str, Any], stat
 
     # Визуализация bounding box и ID на обрезанном кадре
     if state.current_target_bbox is not None:
+        cv2_module = _require_cv2()
         x1, y1, x2, y2, track_id, _, _ = state.current_target_bbox
         # Преобразуем координаты bbox к относительным в обрезанном кадре
         bbox_x1_rel = int(x1 - x1_crop + paste_x1)
@@ -379,17 +428,23 @@ def write_frame_data(frame: np.ndarray, current_frame_data: Dict[str, Any], stat
 
         # Рисуем прямоугольник и ID, если bounding box валиден
         if bbox_x2_rel > bbox_x1_rel and bbox_y2_rel > bbox_y1_rel:
-            cv2.rectangle(cropped_frame, (bbox_x1_rel, bbox_y1_rel), (bbox_x2_rel, bbox_y2_rel), (0, 255, 0), 2)
+            cv2_module.rectangle(cropped_frame, (bbox_x1_rel, bbox_y1_rel), (bbox_x2_rel, bbox_y2_rel), (0, 255, 0), 2)
             text = f"ID: {int(track_id)}" if track_id is not None else "No ID"
             text_pos_y = max(10, bbox_y1_rel - 10)
-            cv2.putText(cropped_frame, text, (bbox_x1_rel, text_pos_y), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2, cv2.LINE_AA)
+            cv2_module.putText(cropped_frame, text, (bbox_x1_rel, text_pos_y), cv2_module.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2, cv2_module.LINE_AA)
 
     # Запись финального кадра и данных кадра в файл логов (JSONL формат)
     out.write(cropped_frame)
-    json.dump(current_frame_data, log_file)
+    json.dump(current_frame_data, log_file, ensure_ascii=False)
     log_file.write('\n')
 
-def cleanup_resources(cap: cv2.VideoCapture, out: cv2.VideoWriter, log_file, video_output_path: str, log_file_path: str) -> None:
+def cleanup_resources(
+    cap: Optional["cv2_types.VideoCapture"],
+    out: Optional["cv2_types.VideoWriter"],
+    log_file: Optional[TextIO],
+    video_output_path: Optional[Union[str, Path]],
+    log_file_path: Optional[Union[str, Path]],
+) -> None:
     """
     Освобождает все ресурсы после обработки.
 
@@ -410,10 +465,13 @@ def cleanup_resources(cap: cv2.VideoCapture, out: cv2.VideoWriter, log_file, vid
     if log_file is not None:
         log_file.close()
         print("Tracking log file closed.")
-    cv2.destroyAllWindows()
+    if cv2 is not None:
+        cv2.destroyAllWindows()
 
-    print(f"Обработка видео завершена. Результат сохранен в '{video_output_path}'.")
-    print(f"Данные трекинга сохранены в '{log_file_path}'.")
+    if video_output_path is not None:
+        print(f"Обработка видео завершена. Результат сохранен в '{video_output_path}'.")
+    if log_file_path is not None:
+        print(f"Данные трекинга сохранены в '{log_file_path}'.")
 
 def track_video_and_center_object(
     model_path: str,
@@ -436,16 +494,22 @@ def track_video_and_center_object(
                                  confidence_threshold, iou_threshold).
     """
     state = TrackerState()
+    cap: Optional["cv2_types.VideoCapture"] = None
+    out: Optional["cv2_types.VideoWriter"] = None
+    log_file: Optional[TextIO] = None
+    log_file_path: Optional[Path] = None
+    final_video_output_path: Optional[Path] = None
+    frame_count = 0
     try:
         model, cap = load_model_and_video(model_path, video_input_path, config)
-        out, video_output_path, log_file_path = setup_output(video_output_path, cap, config)
+        out, final_video_output_path, log_file_path = setup_output(video_output_path, cap, config)
         log_file = open(log_file_path, 'w', encoding='utf-8')
         print(f"Данные трекинга будут записаны в: '{log_file_path}'.")
 
-        frame_count = 0
-        frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        cv2_module = _require_cv2()
+        frame_width = int(cap.get(cv2_module.CAP_PROP_FRAME_WIDTH))
+        frame_height = int(cap.get(cv2_module.CAP_PROP_FRAME_HEIGHT))
+        total_frames = int(cap.get(cv2_module.CAP_PROP_FRAME_COUNT))
 
         while True:
             ret, frame = cap.read()
@@ -462,6 +526,7 @@ def track_video_and_center_object(
 
     except Exception as e:
         print(f"Критическая ошибка в основном цикле обработки кадров на кадре {frame_count}: {e}")
+        raise
     finally:
-        cleanup_resources(cap, out, log_file, video_output_path, log_file_path)
+        cleanup_resources(cap, out, log_file, final_video_output_path or video_output_path, log_file_path)
 

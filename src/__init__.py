@@ -1,0 +1,1 @@
+"""Snowboarder tracking project package."""
